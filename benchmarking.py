@@ -12,7 +12,7 @@ from time import perf_counter
 import matplotlib.pyplot as plt
 import pyzx as zx
 
-plt.style.use('seaborn-whitegrid')
+#plt.style.use('seaborn-whitegrid')
 pd.set_option('display.max_columns', None)
 pd.set_option('display.max_rows', None)
 pd.set_option('display.max_colwidth', None)

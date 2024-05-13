@@ -30,7 +30,7 @@ __all__ = ['bialg_simp','spider_simp', 'id_simp', 'phase_free_simp', 'pivot_simp
 
 from typing import List, Callable, Optional, Union, Generic, Tuple, Dict, Iterator, Any, cast, DefaultDict
 from collections import defaultdict
-
+from .heuristics_korb.simplify import greedy_wire_reduce #korbinian
 from .utils import EdgeType, VertexType, toggle_edge, vertex_is_zx, toggle_vertex
 from .rules import *
 from .heuristics import *
@@ -233,6 +233,20 @@ def full_reduce(g: BaseGraph[VT,ET], quiet: bool = True, stats: Optional[Stats] 
         j = pivot_gadget_simp(g,quiet=quiet, stats=stats)
         if i+j == 0: 
             break
+        
+def greedy_simp(g: BaseGraph[VT,ET], boundaries=False, gadgets=False, max_v=None, cap=1, quiet:bool=True, stats:Optional[Stats]=None) -> int:
+    spider_simp(g, quiet=quiet, stats=stats)
+    to_gh(g)
+    i = 0
+    max_v = len(g.vertex_set()) if max_v else None
+    while True:
+        i1 = id_simp(g, quiet=quiet, stats=stats)
+        i2 = spider_simp(g, quiet=quiet, stats=stats) 
+        i3 = greedy_wire_reduce(g, boundaries=boundaries, gadgets=gadgets ,max_v=max_v, cap=cap, quiet=quiet, stats=stats)
+            
+        if i1+i2+i3==0: break
+        i += 1
+    return i  
 
 
 class PhaseTeleporter(Generic[VT, ET]):
