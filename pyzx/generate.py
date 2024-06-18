@@ -166,7 +166,9 @@ def cquere_circuit(
         p_ry: float = 0.25,
         p_rz: float = 0.25,
         p_rzz: float = 0.25,
-        p_t: float = 0.2,
+        p_trx: float = 0.2,
+        p_try: float = 0.2,
+        p_trz: float = 0.2,
         ) -> Circuit:
     """Construct a Circuit consisting of CNOT, HAD and phase gates.
     The default phase gate is the T gate, but if ``clifford=True``\ , then
@@ -189,20 +191,20 @@ def cquere_circuit(
         r = random.random()
         if r > 1-p_rx:
             probt = random.random()
-            if probt > 1-p_t:
+            if probt > 1-p_trx:
                 c.add_gate("XPhase",random.randrange(qubits), phase=Fraction(299,300))
             else:
                 c.add_gate("XPhase",random.randrange(qubits), phase=Fraction(1,2))
         elif r > 1-p_ry-p_rx:
             probt = random.random()
-            if probt > 1-p_t:
+            if probt > 1-p_try:
                 c.add_gate("YPhase",random.randrange(qubits), phase=Fraction(587,550))
             else:
                 c.add_gate("YPhase",random.randrange(qubits), phase=Fraction(1,2))
 
         elif r > 1-p_rx-p_ry-p_rz:
             probt = random.random()
-            if probt > 1-p_t:
+            if probt > 1-p_trz:
                 c.add_gate("ZPhase",random.randrange(qubits), phase=Fraction(-259,260))
             else:
                 c.add_gate("ZPhase",random.randrange(qubits), phase=Fraction(1,2))        
@@ -211,7 +213,7 @@ def cquere_circuit(
             while True:
                 ctrl = random.randrange(qubits)
                 if ctrl!=tgt: break
-            c.add_gate("RZZ",tgt,ctrl)
+            c.add_gate("RZZ",tgt,ctrl, phase=Fraction(1,2))
     return c
 
 
