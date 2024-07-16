@@ -258,7 +258,7 @@ class PhaseTeleporter(Generic[VT, ET]):
         self.phase_mult: Dict[VT,int] = {}
         self.non_clifford_vertices: Set[VT] = set()
         for v in self.original_graph.vertices():
-            if self.original_graph.phase(v).denominator > 2:
+            if self.original_graph.phase(v).denominator > 2 or isinstance(self.original_graph.phase(v), Poly):
                 self.parent_vertex[v] = v
                 self.vertex_rank[v] = 0
                 self.phase_mult[v] = 1
@@ -484,7 +484,12 @@ def to_rg(g: BaseGraph[VT,ET], select: Optional[Callable[[VT], bool]] = None) ->
 
 def to_graph_like(g: BaseGraph[VT,ET], assert_bound_connections: bool = True) -> None:
     """Puts a ZX-diagram in graph-like form. 
+    The graph should contain no hboxes, only hadamard edges. Convert arity-2 hboxes to hadamard edges using ``hsimplify.from_hypergraph_form(g)``.
     If ``assert_bound_connections`` is False, the conditions on inputs/output connections are not enforced."""
+    
+    if any(g.type(v) == VertexType.H_BOX for v in g.vertices()):
+        raise ValueError("Graph contains hboxes. Try converting arity-2 hboxes to hadamard edges first by running hsimplify.from_hypergraph_form(g).")
+    
     to_gh(g)
     spider_simp(g, quiet=True)
     
@@ -493,14 +498,14 @@ def to_graph_like(g: BaseGraph[VT,ET], assert_bound_connections: bool = True) ->
     for b in [v for v in g.vertices() if g.type(v) == VertexType.BOUNDARY]:
         for n in list(g.neighbors(b)):
             if g.edge_type(g.edge(b,n)) == EdgeType.HADAMARD:
-                z = g.add_vertex(VertexType.Z)
+                z = g.add_vertex(ty=VertexType.Z,row=0.5*g.row(n)+0.5*g.row(b),qubit=0.5*g.qubit(n)+0.5*g.qubit(b))
                 g.add_edge(g.edge(b,z), edgetype=EdgeType.SIMPLE)
                 g.add_edge(g.edge(z,n), edgetype=EdgeType.HADAMARD)
                 g.remove_edge(g.edge(b,n))
             elif g.type(n) == VertexType.BOUNDARY:
-                z1 = g.add_vertex(VertexType.Z)
-                z2 = g.add_vertex(VertexType.Z)
-                z3 = g.add_vertex(VertexType.Z)
+                z1 = g.add_vertex(ty=VertexType.Z,row=0.25*g.row(n)+0.75*g.row(b),qubit=0.25*g.qubit(n)+0.75*g.qubit(b))
+                z2 = g.add_vertex(ty=VertexType.Z,row=0.5*g.row(n)+0.5*g.row(b),qubit=0.5*g.qubit(n)+0.5*g.qubit(b))
+                z3 = g.add_vertex(ty=VertexType.Z,row=0.75*g.row(n)+0.25*g.row(b),qubit=0.75*g.qubit(n)+0.25*g.qubit(b))
                 g.add_edge(g.edge(b,z1), edgetype=EdgeType.SIMPLE)
                 g.add_edge(g.edge(z1,z2), edgetype=EdgeType.HADAMARD)
                 g.add_edge(g.edge(z2,z3), edgetype=EdgeType.HADAMARD)
@@ -511,12 +516,14 @@ def to_graph_like(g: BaseGraph[VT,ET], assert_bound_connections: bool = True) ->
         boundary_ns = [n for n in g.neighbors(v) if g.type(n)==VertexType.BOUNDARY]
         if len(boundary_ns) <= 1: continue
         for b in boundary_ns[:-1]:
-            z1 = g.add_vertex(VertexType.Z)
-            z2 = g.add_vertex(VertexType.Z)
+            z1 = g.add_vertex(ty=VertexType.Z,row=0.3*g.row(v)+0.7*g.row(b),qubit=0.3*g.qubit(v)+0.7*g.qubit(b))
+            z2 = g.add_vertex(ty=VertexType.Z,row=0.7*g.row(v)+0.3*g.row(b),qubit=0.7*g.qubit(v)+0.3*g.qubit(b))
             g.add_edge(g.edge(b,z1), edgetype=EdgeType.SIMPLE)
             g.add_edge(g.edge(z1,z2), edgetype=EdgeType.HADAMARD)
             g.add_edge(g.edge(z2,v), edgetype=EdgeType.HADAMARD)
             g.remove_edge(g.edge(b,v))
+    
+    assert(is_graph_like(g))
 
 def is_graph_like(g, assert_bound_connections: bool = True):
     """Returns True if a ZX-diagram is graph-like.
