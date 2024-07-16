@@ -159,6 +159,62 @@ def CNOT_HAD_PHASE_circuit(
                 if ctrl!=tgt: break
             c.add_gate("CNOT",tgt,ctrl)
     return c
+def cquere_circuit(
+        qubits: int,
+        depth: int,
+        p_rx: float = 0.25,
+        p_ry: float = 0.25,
+        p_rz: float = 0.25,
+        p_rzz: float = 0.25,
+        p_trx: float = 0.2,
+        p_try: float = 0.2,
+        p_trz: float = 0.2,
+        ) -> Circuit:
+    """Construct a Circuit consisting of CNOT, HAD and phase gates.
+    The default phase gate is the T gate, but if ``clifford=True``\ , then
+    this is replaced by the S gate.
+
+    Args:
+        qubits: number of qubits of the circuit
+        depth: number of gates in the circuit
+        p_had: probability that each gate is a Hadamard gate
+        p_t: probability that each gate is a T gate (or if ``clifford`` is set, S gate)
+        clifford: when set to True, the phase gates are S gates instead of T gates.
+
+    Returns:
+        A random circuit consisting of Hadamards, CNOT gates and phase gates.
+
+    """
+    assert p_rx+p_ry+p_rz+p_rzz == 1
+    c = Circuit(qubits)
+    for _ in range(depth):
+        r = random.random()
+        if r > 1-p_rx:
+            probt = random.random()
+            if probt > 1-p_trx:
+                c.add_gate("XPhase",random.randrange(qubits), phase=Fraction(299,300))
+            else:
+                c.add_gate("XPhase",random.randrange(qubits), phase=Fraction(1,2))
+        elif r > 1-p_ry-p_rx:
+            probt = random.random()
+            if probt > 1-p_try:
+                c.add_gate("YPhase",random.randrange(qubits), phase=Fraction(587,550))
+            else:
+                c.add_gate("YPhase",random.randrange(qubits), phase=Fraction(1,2))
+
+        elif r > 1-p_rx-p_ry-p_rz:
+            probt = random.random()
+            if probt > 1-p_trz:
+                c.add_gate("ZPhase",random.randrange(qubits), phase=Fraction(-259,260))
+            else:
+                c.add_gate("ZPhase",random.randrange(qubits), phase=Fraction(1,2))        
+        else:
+            tgt = random.randrange(qubits)
+            while True:
+                ctrl = random.randrange(qubits)
+                if ctrl!=tgt: break
+            c.add_gate("RZZ",tgt,ctrl, phase=Fraction(1,2))
+    return c
 
 
 def cnots(qubits: int, depth: int, backend:Optional[str]=None) -> BaseGraph:
@@ -517,7 +573,123 @@ def cliffordT(
     :rtype: Instance of graph of the given backend.
     """
     return cliffordTmeas(qubits, depth, p_t, p_s, p_hsh, p_cnot, 0, backend)
+def generate_cquere_graph(qubits: int, 
+        depth: int, 
+        p_t:Optional[float]=None, 
+        p_s:Optional[float]=None, 
+        p_cz:Optional[float]=None, 
+        p_cnot:Optional[float]=None, 
+        p_s_prob: Optional[float]=0.5,
+        ) -> BaseGraph:
+    g = Graph()
+    qs = list(range(qubits))  # tracks qubit indices of vertices
+    v = 0                     # next vertex to add
+    r = 0                     # current row
 
+    num = 0.0
+    rest = 1.0
+    if p_t is None: num += 1.0
+    else: rest -= p_t
+    if p_s is None: num += 1.0
+    else: rest -= p_s
+    if p_cz is None: num += 1.0
+    else: rest -= p_cz
+    if p_cnot is None: num += 1.0
+    else: rest -= p_cnot
+
+    if rest < 0: raise ValueError("Probabilities are >1.")
+
+    if p_t is None: p_t = rest / num
+    if p_s is None: p_s = rest / num
+    if p_cz is None: p_cz = rest / num
+    if p_cnot is None: p_cnot = rest / num
+
+    inputs = []
+    outputs = []
+
+    for i in range(qubits):
+        g.add_vertex(VertexType.BOUNDARY,i,r)
+        inputs.append(v)
+        v += 1
+    r += 1
+
+    for i in range(qubits):
+        g.add_vertex(VertexType.Z,i,r)
+        g.add_edge((qs[i], v))
+        qs[i] = v
+        v += 1
+    r += 1
+
+    for i in range(2, depth+2):
+        p = random.random()
+        q0 = random.randrange(qubits)
+
+        g.add_vertex(VertexType.Z,q0,r)
+        g.add_edge((qs[q0], v))
+        qs[q0] = v
+        v += 1
+        r += 1
+
+        if p > 1 - p_cnot:
+            # apply CNOT gate
+            q1 = random.randrange(qubits-1)
+            if q1 >= q0: q1 += 1
+
+            g.add_vertex(VertexType.X,q1,r-1)
+            g.add_edge((qs[q1], v))
+            g.add_edge((v-1,v))
+            g.add_vertex(VertexType.Z,q1,r, phase = Fraction(1,2))
+            g.add_edge((v,v+1))
+            g.add_vertex(VertexType.Z,q0, r+1)
+            g.add_vertex(VertexType.X,q1, r+1)
+            g.add_edge((v+2,v+3))
+            g.add_edge((qs[q0], v+2))
+            g.add_edge((v+1, v+3))
+            g.scalar.add_power(1)
+            g.scalar.add_power(1)
+            qs[q1] = v+3
+            qs[q0] = v+2
+            v += 4
+            r+=2
+        elif p > 1 - p_cnot - p_cz:
+            # apply CZ gate
+            q1 = random.randrange(qubits-1)
+            if q1 >= q0: q1 += 1
+
+            g.add_vertex(VertexType.Z,q1,r-1)
+            g.add_edge((qs[q1], v))
+            g.add_edge((v-1,v), edgetype=EdgeType.HADAMARD)
+            g.scalar.add_power(1)
+            qs[q1] = v
+            v += 1
+        elif p > 1 - p_cnot - p_cz - p_s:
+            # apply S gate
+            num = random.uniform(0,1)
+            if num <= p_s_prob:
+                g.set_phase(v-1, Fraction(1,2))
+            else:
+                g.set_phase(v-1, Fraction(3,2))
+        else:
+            # apply T gate
+            g.set_phase(v-1, Fraction(1,8))
+
+    for i in range(qubits):
+        g.add_vertex(VertexType.Z,i,r)
+        g.add_edge((qs[i], v))
+        qs[i] = v
+        v += 1
+    r += 1
+
+    for i in range(qubits):
+        g.add_vertex(VertexType.BOUNDARY,i,r)
+        g.add_edge((qs[i], v))
+        outputs.append(v)
+        v += 1
+
+    g.set_inputs(tuple(inputs))
+    g.set_outputs(tuple(outputs))
+
+    return g
 def cliffords(
         qubits: int, 
         depth: int, 
