@@ -250,6 +250,125 @@ def random_phase(add_t: bool) -> Fraction:
         return Fraction(random.randint(1,8),4)
     return Fraction(random.randint(1,4),2)
 
+
+def generate_cquere(qubits: int, 
+        depth: int, 
+        p_t:Optional[float]=None, 
+        p_s:Optional[float]=None, 
+        p_cz:Optional[float]=None, 
+        p_cnot:Optional[float]=None, 
+        p_s_prob: Optional[float]=0.5,
+        ) -> BaseGraph:
+    g = Graph()
+    qs = list(range(qubits))  # tracks qubit indices of vertices
+    v = 0                     # next vertex to add
+    r = 0                     # current row
+
+    num = 0.0
+    rest = 1.0
+    if p_t is None: num += 1.0
+    else: rest -= p_t
+    if p_s is None: num += 1.0
+    else: rest -= p_s
+    if p_cz is None: num += 1.0
+    else: rest -= p_cz
+    if p_cnot is None: num += 1.0
+    else: rest -= p_cnot
+
+    if rest < 0: raise ValueError("Probabilities are >1.")
+
+    if p_t is None: p_t = rest / num
+    if p_s is None: p_s = rest / num
+    if p_cz is None: p_cz = rest / num
+    if p_cnot is None: p_cnot = rest / num
+
+    inputs = []
+    outputs = []
+
+    for i in range(qubits):
+        g.add_vertex(VertexType.BOUNDARY,i,r)
+        inputs.append(v)
+        v += 1
+    r += 1
+
+    for i in range(qubits):
+        g.add_vertex(VertexType.Z,i,r)
+        g.add_edge((qs[i], v))
+        qs[i] = v
+        v += 1
+    r += 1
+
+    for i in range(2, depth+2):
+        p = random.random()
+        q0 = random.randrange(qubits)
+
+        g.add_vertex(VertexType.Z,q0,r)
+        g.add_edge((qs[q0], v))
+        qs[q0] = v
+        v += 1
+        r += 1
+
+        if p > 1 - p_cnot:
+            # apply CNOT gate
+            q1 = random.randrange(qubits-1)
+            if q1 >= q0: q1 += 1
+
+            g.add_vertex(VertexType.X,q1,r-1)
+            g.add_edge((qs[q1], v))
+            g.add_edge((v-1,v))
+            g.add_vertex(VertexType.Z,q1,r, phase = Fraction(1,2))
+            g.add_edge((v,v+1))
+            g.add_vertex(VertexType.Z,q0, r+1)
+            g.add_vertex(VertexType.X,q1, r+1)
+            g.add_edge((v+2,v+3))
+            g.add_edge((qs[q0], v+2))
+            g.add_edge((v+1, v+3))
+            g.scalar.add_power(1)
+            g.scalar.add_power(1)
+            qs[q1] = v+3
+            qs[q0] = v+2
+            v += 4
+            r+=2
+        elif p > 1 - p_cnot - p_cz:
+            # apply CZ gate
+            q1 = random.randrange(qubits-1)
+            if q1 >= q0: q1 += 1
+
+            g.add_vertex(VertexType.Z,q1,r-1)
+            g.add_edge((qs[q1], v))
+            g.add_edge((v-1,v), edgetype=EdgeType.HADAMARD)
+            g.scalar.add_power(1)
+            qs[q1] = v
+            v += 1
+        elif p > 1 - p_cnot - p_cz - p_s:
+            # apply S gate
+            num = random.uniform(0,1)
+            if num <= p_s_prob:
+                g.set_phase(v-1, Fraction(1,2))
+            else:
+                g.set_phase(v-1, Fraction(3,2))
+        else:
+            # apply T gate
+            g.set_phase(v-1, Fraction(1,8))
+
+    for i in range(qubits):
+        g.add_vertex(VertexType.Z,i,r)
+        g.add_edge((qs[i], v))
+        qs[i] = v
+        v += 1
+    r += 1
+
+    for i in range(qubits):
+        g.add_vertex(VertexType.BOUNDARY,i,r)
+        g.add_edge((qs[i], v))
+        outputs.append(v)
+        v += 1
+
+    g.set_inputs(tuple(inputs))
+    g.set_outputs(tuple(outputs))
+
+    return g
+
 def cliffordTmeas(
         qubits: int, 
         depth: int, 
