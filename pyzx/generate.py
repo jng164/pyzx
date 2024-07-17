@@ -185,7 +185,8 @@ def cquere_circuit(
         A random circuit consisting of Hadamards, CNOT gates and phase gates.
 
     """
-    assert p_rx+p_ry+p_rz+p_rzz == 1
+    #assert p_rx+p_ry+p_rz+p_rzz == 1
+    assert p_rx+p_ry+p_rz+p_rzz+p_trz == 1 #12 qubit training
     c = Circuit(qubits)
     for _ in range(depth):
         r = random.random()
