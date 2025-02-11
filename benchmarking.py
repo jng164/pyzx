@@ -11,6 +11,7 @@ from tqdm import tqdm # type: ignore
 from time import perf_counter
 import matplotlib.pyplot as plt
 import pyzx as zx
+import json
 
 #plt.style.use('seaborn-whitegrid')
 pd.set_option('display.max_columns', None)
@@ -62,7 +63,7 @@ class Benchmark:
     
     def show_attributes(self):
         """Displays which functions/circuit groups have been loaded, and a table for which have been run"""
-        atts = ['Qubits','Gates','2Q Count','T Count','t_opt']
+        atts = ['Qubits','Gates','Single Qubit', '2Q Count','T Count','t_opt', 'depth']
         print(f'Circuit attributes:  {atts}')
         if len(self.funcs) == 0: print('No loaded functions')
         else: print(f'Loaded functions:  {list(self.funcs.keys())}')
@@ -112,7 +113,8 @@ class Benchmark:
                 if simp_strategy == 'Original':
                     self.circuit_groups[group_name].append(circ_name)
                 if circ_name not in self.circuits.keys(): self.circuits[circ_name] = dict()
-                self.circuits[circ_name][simp_strategy] = [circ, circ.qubits, len(circ.gates), circ.twoqubitcount(), circ.tcount(), None]
+                singleq = len(circ.gates) - circ.twoqubitcount()
+                self.circuits[circ_name][simp_strategy] = [circ, circ.qubits, len(circ.gates), singleq,  circ.twoqubitcount(), circ.tcount(), circ.depth(), None]
     
     def add_simplification_func(self, func: Callable[..., Circuit], name: str, groups_to_run: Optional[List[str]] = ['all'], verify=False, rerun = False) -> None:
         """Loads a simplification function
@@ -175,7 +177,14 @@ class Benchmark:
                     if g.num_vertices() != 2*len(g.inputs()):
                         print(f'Circuit resulting from {func_name} on {circ_name} not verified',flush=True)
                         continue
-                self.circuits[circ_name][func_name] = [opt_circ, opt_circ.qubits, len(opt_circ.gates), opt_circ.twoqubitcount(), opt_circ.tcount(), t_opt]
+                directory = "./specific_circuits_data/"+str(func_name)
+                qasm_string =  opt_circ.to_qasm()
+                os.makedirs(directory, exist_ok=True)
+                file_path = os.path.join(directory, str(circ_name)+".qasm")
+                with open(file_path, 'w') as file: 
+                    file.write(qasm_string)
+                singleq = len(opt_circ.gates) - opt_circ.twoqubitcount()
+                self.circuits[circ_name][func_name] = [opt_circ, opt_circ.qubits, len(opt_circ.gates), singleq, opt_circ.twoqubitcount(), opt_circ.tcount(), opt_circ.depth(), t_opt]
     
     @staticmethod
     def generate_cliffordT_circuit(qubits: int, depth: int, p_cnot: float, p_t: float) -> Circuit:
@@ -346,11 +355,15 @@ class Benchmark:
         elif any('2Q Count' in col for col in cols): border_col = '2Q Count'
         elif any('T Count' in col for col in cols): border_col = 'T Count'
         elif any('t_opt' in col for col in cols): border_col = 't_opt'
+        elif any('depth' in col for col in cols): border_col = 'depth'
+        elif any('Single Qubit' in col for col in cols): border_col = 'Single Qubit'
         styler.set_table_styles(dict.fromkeys([col for col in cols if border_col in col or ('Original' in col and 'Qubits' in col)], [{'selector': 'th', 'props': 'border-left: 1px solid white !important'},
                                                                                         {'selector': 'td', 'props': 'border-left: 1px solid white !important'}]), overwrite=False, axis=0)
         styler.apply(lambda s: np.where(s==np.nanmin(s.values),'color:green',''), axis=1, subset=[col for col in cols if 'Gates' in col])
         styler.apply(lambda s: np.where(s==np.nanmin(s.values),'color:green',''), axis=1, subset=[col for col in cols if '2Q Count' in col])  
         styler.apply(lambda s: np.where(s==np.nanmin(s.values),'color:green',''), axis=1, subset=[col for col in cols if 'T Count' in col])
+        styler.apply(lambda s: np.where(s==np.nanmin(s.values),'color:green',''), axis=1, subset=[col for col in cols if 'depth' in col])
+        styler.apply(lambda s: np.where(s==np.nanmin(s.values),'color:green',''), axis=1, subset=[col for col in cols if 'Single Qubit' in col])
         styler.format(subset=[col for col in cols if 't_opt' in col],precision=2, na_rep='-', thousands=",")
         styler.format(subset=[col for col in cols if 't_opt' not in col],precision=0, na_rep='-', thousands=",")
         return(styler)
@@ -380,7 +393,7 @@ class Benchmark:
                     print(f'The function {f} has not been added. Call <benchmark>.show_attributes() to see loaded functions.')
                     funcs.remove(f)
         
-        all_atts = ['Qubits','Gates','2Q Count','T Count','t_opt','na']
+        all_atts = ['Qubits','Gates','Single Qubit', '2Q Count','T Count','depth','t_opt','na']
         if atts == ['all']: atts = all_atts
         match_atts = [True if att in atts else False for att in all_atts]
         
@@ -408,3 +421,89 @@ class Benchmark:
         df=df.dropna(axis=1, how='all')
         display(df.style.pipe(self.table_style, cols=df.columns))
         return df        
+    
+
+
+
+  
+
+    def df2(self, groups: List[str] = ['all'], routines: List[str] = ['all'], funcs: List[str] = ['all'], atts: List[str] = ['all'], json_file: str = None) -> pd.DataFrame:
+        """Produces a pandas dataframe of metrics over benchmark circuits.
+
+        Args:
+            groups (List[str], optional): group names for circuits for index. Defaults to 'all'.
+            routines (List[str], optional): names for routines for columns. Defaults to 'all'.
+            funcs (List[str], optional): names for functions for columns. Defaults to 'all'.
+            atts (List[str], optional): names for attributes to show for each function/routine. Defaults to 'all'.
+            json_file (str, optional): path to a JSON file with best stats to add as a new column. Defaults to None.
+
+        Returns: 
+            pd.DataFrame
+        """
+        if groups == ['all']: 
+            groups = list(self.circuit_groups.keys())
+        if routines == ['all']: 
+            routines = sorted(list(self.routines))
+        else:
+            for r in routines[:]:
+                if r not in self.routines:
+                    print(f'The routine {r} has not been added. Call <benchmark>.show_attributes() to see loaded routines.')
+                    routines.remove(r)
+        if funcs == ['all']: 
+            funcs = sorted(list(self.funcs))
+        else:
+            for f in funcs[:]:
+                if f not in self.funcs.keys():
+                    print(f'The function {f} has not been added. Call <benchmark>.show_attributes() to see loaded functions.')
+                    funcs.remove(f)
+        
+        all_atts = ['Qubits','Gates','Single Qubit', '2Q Count','T Count','depth','t_opt','na']
+        if atts == ['all']: atts = all_atts
+        match_atts = [True if att in atts else False for att in all_atts]
+        
+        heads = ['Original'] + routines + funcs
+        circs = []
+        data = []
+        for g in groups:
+            if g not in self.circuit_groups.keys():
+                print(f'The group of circuits {g} has not been added. Call <benchmark>.show_attributes() to see loaded groups.')
+                continue
+            for c in self.circuit_groups[g]:
+                c_data = []
+                for f in heads:
+                    try: 
+                        d = self.circuits[c][f][1:]
+                    except: 
+                        d = [np.nan]*6
+                    c_data.extend([x for i,x in enumerate(d) if match_atts[i]])
+                circs.append(c)
+                data.append(c_data)
+        
+        df = pd.DataFrame(data=data, columns=pd.MultiIndex.from_product([heads, atts]))
+        df['Circuits'] = circs
+        df = df.set_index('Circuits')
+        df = df.sort_index()
+        df = df[[col for col in df.columns if 'Qubits' not in col or 'Original' in col]]
+        df = df.dropna(axis=1, how='all')
+        
+        # Add data from the JSON file as a new column if provided
+        if json_file:
+            with open(json_file, 'r') as file:
+                best_stats = json.load(file)
+            
+            # Create a DataFrame from the JSON data
+            json_df = pd.DataFrame.from_dict(best_stats, orient='index')
+            json_df = json_df[['gates', 'single qubit', 'twoqubit']]
+            json_df.rename(columns={'gates': 'Gates', 'single qubit': "Single Qubit", 'twoqubit': '2Q Count'}, inplace=True)
+            
+            # Ensure the columns in json_df match the structure of the existing DataFrame
+            json_df.columns = pd.MultiIndex.from_product([['Random-RL-ZX'], json_df.columns])
+            
+            # Merge the new data with the existing DataFrame
+            df = pd.concat([df, json_df], axis=1)
+        
+        display(df.style.pipe(self.table_style, cols=df.columns))
+        return df
+
+
+
