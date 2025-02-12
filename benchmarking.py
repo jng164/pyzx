@@ -355,7 +355,7 @@ class Benchmark:
         styler.format(subset=[col for col in cols if 't_opt' not in col],precision=0, na_rep='-', thousands=",")
         return(styler)
                 
-    def df(self, groups: List[str] = ['all'], routines: List[str] = ['all'], funcs: List[str] = ['all'], atts: List[str] = ['all']) -> pd.DataFrame:
+    def df(self, groups: List[str] = ['all'], routines: List[str] = ['all'], funcs: List[str] = ['all'], atts: List[str] = ['all'], json_file: str = None) -> pd.DataFrame:
         """Produces a pandas dataframe of metrics over benchmark circuits.
 
         Args:
@@ -363,24 +363,29 @@ class Benchmark:
             routines (List[str], optional): names for routines for columns. Defaults to 'all'.
             funcs (List[str], optional): names for functions for columns. Defaults to 'all'.
             atts (List[str], optional): names for attributes to show for each function/routine. Defaults to 'all'.
+            json_file (str, optional): path to a JSON file with best stats to add as a new column. Defaults to None.
 
-        Returns: pd.DataFrame
+        Returns: 
+            pd.DataFrame
         """
-        if groups==['all']: groups=list(self.circuit_groups.keys())
-        if routines==['all']: routines=sorted(list(self.routines))
+        if groups == ['all']: 
+            groups = list(self.circuit_groups.keys())
+        if routines == ['all']: 
+            routines = sorted(list(self.routines))
         else:
             for r in routines[:]:
                 if r not in self.routines:
                     print(f'The routine {r} has not been added. Call <benchmark>.show_attributes() to see loaded routines.')
                     routines.remove(r)
-        if funcs==['all']: funcs=sorted(list(self.funcs))
+        if funcs == ['all']: 
+            funcs = sorted(list(self.funcs))
         else:
             for f in funcs[:]:
                 if f not in self.funcs.keys():
                     print(f'The function {f} has not been added. Call <benchmark>.show_attributes() to see loaded functions.')
                     funcs.remove(f)
         
-        all_atts = ['Qubits','Gates','2Q Count','T Count','t_opt','na']
+        all_atts = ['Qubits','Gates','Single Qubit', '2Q Count','T Count','depth','t_opt','na']
         if atts == ['all']: atts = all_atts
         match_atts = [True if att in atts else False for att in all_atts]
         
@@ -394,17 +399,36 @@ class Benchmark:
             for c in self.circuit_groups[g]:
                 c_data = []
                 for f in heads:
-                    try: d = self.circuits[c][f][1:]
-                    except: d = [np.nan]*6
+                    try: 
+                        d = self.circuits[c][f][1:]
+                    except: 
+                        d = [np.nan]*6
                     c_data.extend([x for i,x in enumerate(d) if match_atts[i]])
                 circs.append(c)
                 data.append(c_data)
         
-        df = pd.DataFrame(data=data, columns=pd.MultiIndex.from_product([heads,atts]))
+        df = pd.DataFrame(data=data, columns=pd.MultiIndex.from_product([heads, atts]))
         df['Circuits'] = circs
         df = df.set_index('Circuits')
         df = df.sort_index()
-        df=df[[col for col in df.columns if 'Qubits' not in col or 'Original' in col]]
-        df=df.dropna(axis=1, how='all')
+        df = df[[col for col in df.columns if 'Qubits' not in col or 'Original' in col]]
+        df = df.dropna(axis=1, how='all')
+        
+        # Add data from the JSON file as a new column if provided
+        if json_file:
+            with open(json_file, 'r') as file:
+                best_stats = json.load(file)
+            
+            # Create a DataFrame from the JSON data
+            json_df = pd.DataFrame.from_dict(best_stats, orient='index')
+            json_df = json_df[['gates', 'single qubit', 'twoqubit']]
+            json_df.rename(columns={'gates': 'Gates', 'single qubit': "Single Qubit", 'twoqubit': '2Q Count'}, inplace=True)
+            
+            # Ensure the columns in json_df match the structure of the existing DataFrame
+            json_df.columns = pd.MultiIndex.from_product([['Random-RL-ZX'], json_df.columns])
+            
+            # Merge the new data with the existing DataFrame
+            df = pd.concat([df, json_df], axis=1)
+        
         display(df.style.pipe(self.table_style, cols=df.columns))
-        return df        
+        return df
