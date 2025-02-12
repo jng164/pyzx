@@ -732,6 +732,30 @@ class RXX(Gate):
         for gate in self.to_basic_gates():
             gate.to_graph(g, q_mapper, c_mapper)
 
+class RYY(Gate):
+    name = 'RYY'
+    qasm_name = 'ryy'
+    print_phase = True
+    def __init__(self, control: int, target: int, phase: FractionLike) -> None:
+        self.target = target
+        self.control = control
+        self.phase = phase
+
+    def to_basic_gates(self):
+        return  (XPhase(self.control, Fraction(1,2)),
+                XPhase(self.target, Fraction(1,2)),
+                CNOT(self.control,self.target),
+                ZPhase(self.target, self.phase),
+                CNOT(self.control, self.target),
+                XPhase(self.control, Fraction(3,2)),
+                XPhase(self.target, Fraction(3,2)))
+            
+
+    def to_graph(self, g, q_mapper, c_mapper):
+        for gate in self.to_basic_gates():
+            gate.to_graph(g, q_mapper, c_mapper)
+
+
 class CPhase(CRZ):
     name = 'CPhase'
     qasm_name = 'cp'
@@ -1257,6 +1281,7 @@ gate_types: Dict[str,Type[Gate]] = {
     "CRY": CRY,
     "RZZ": RZZ,
     "RXX": RXX,
+    "RYY": RYY,
     "FSim": FSim,
     "InitAncilla": InitAncilla,
     "PostSelect": PostSelect,
@@ -1298,6 +1323,7 @@ qasm_gate_table: Dict[str, Type[Gate]] = {
     "crz": CRZ,
     "rxx": RXX,
     "rzz": RZZ,
+    "ryy": RYY,
     "ccx": Tofolli,
     "ccz": CCZ,
     "swap": SWAP,
