@@ -720,9 +720,9 @@ class RZX(Gate):
 
     def to_basic_gates(self):
         return HAD(self.target) + \
-               [CNOT(self.control,self.target)] + \
+               CNOT(self.control,self.target) + \
                ZPhase(self.target, self.phase) + \
-               [CNOT(self.control,self.target)] + \
+               CNOT(self.control,self.target) + \
                 HAD(self.target)
     def to_graph(self, g, q_mapper, c_mapper):
         for gate in self.to_basic_gates():
