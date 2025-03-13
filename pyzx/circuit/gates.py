@@ -612,7 +612,6 @@ class CZ(Gate):
         CNOT(c,t).to_emoji(strings)
         strings[t].append(':H_:')
 
-
 class XCX(CZ):
     '''This class represents the X-controlled-X gate.'''
     name = 'XCX'
@@ -709,6 +708,37 @@ class CRZ(Gate):
     def to_graph(self, g, q_mapper, c_mapper):
         for gate in self.to_basic_gates():
             gate.to_graph(g, q_mapper, c_mapper)
+
+class RZX(Gate):
+    name = 'RZX'
+    qasm_name = 'rzx'
+    print_phase = True
+    def __init__(self, control: int, target: int, phase: FractionLike) -> None:
+        self.target = target
+        self.control = control
+        self.phase = phase
+
+    def to_basic_gates(self):
+        return HAD(self.target) + \
+               [CNOT(self.control,self.target)] + \
+               ZPhase(self.target, self.phase) + \
+               [CNOT(self.control,self.target)] + \
+                HAD(self.target)
+    def to_graph(self, g, q_mapper, c_mapper):
+        for gate in self.to_basic_gates():
+            gate.to_graph(g, q_mapper, c_mapper)
+
+class ECR(Gate):
+    name = 'ECR'
+    qasm_name = 'ecr'
+    def __init__(self, control: int, target: int) -> None:
+        self.target = target
+        self.control = control
+    def to_basic_gates(self):
+        return RZX(self.control, self.target, Fraction(1, 4)) + \
+                XPhase(self.control) + \
+                RZX(self.control, self.target, -Fraction(1, 4))
+                
 
 class RXX(Gate):
     name = 'RXX'
@@ -1287,6 +1317,8 @@ gate_types: Dict[str,Type[Gate]] = {
     "PostSelect": PostSelect,
     "DiscardBit": DiscardBit,
     "Measurement": Measurement,
+    "ECR": ECR,
+    "RZX": RZX
 }
 
 qasm_gate_table: Dict[str, Type[Gate]] = {
@@ -1329,4 +1361,6 @@ qasm_gate_table: Dict[str, Type[Gate]] = {
     "swap": SWAP,
     "cswap": CSWAP,
     "measure": Measurement,
+    "ecr": ECR,
+    "rzx": RZX
 }

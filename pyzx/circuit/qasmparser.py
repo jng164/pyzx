@@ -196,7 +196,7 @@ class QASMParser(object):
             elif name == 'u3':
                 if len(phases) != 3: raise TypeError("Invalid specification {}".format(c))
                 gates.append(U3(argset[0],phases[0],phases[1],phases[2]))
-            elif name in ('cx', 'CX', 'cy', 'cz', 'ch', 'csx', 'swap'):
+            elif name in ('cx', 'CX', 'cy', 'cz', 'ch', 'csx', 'swap', 'ecr'):
                 if len(phases) != 0: raise TypeError("Invalid specification {}".format(c))
                 g = qasm_gate_table[name](control=argset[0],target=argset[1])  # type: ignore
                 gates.append(g)
