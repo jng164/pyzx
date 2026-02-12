@@ -32,6 +32,7 @@ setup(
         "pyzx.routing",
         "pyzx.local_search",
         "pyzx.scripts",
+        "pyzx.heuristics_korb",
     ],
     python_requires='>=3.7',
     install_requires=["typing_extensions>=3.7.4",
